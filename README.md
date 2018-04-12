@@ -7,8 +7,10 @@ Algorithms available in methods:
 ![alt text](/img/dqn_classic.png)
 
 - Dueling Deep Q-Network [Wang, Ziyu, et al. "Dueling network architectures for deep reinforcement learning." ICML (2016).](https://arxiv.org/pdf/1511.06581.pdf)
+![alt text](/img/dqn_dueling.png)
 
 - Categorical Deep Q-Network [Bellemare, Marc G., Will Dabney, and Rémi Munos. "A distributional perspective on reinforcement learning." ICML (2017).](https://arxiv.org/pdf/1707.06887)
+![alt text](/img/dqn_categorical.png)
 
 - Soft Actor-Critic [Haarnoja, Tuomas, et al. "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor." arXiv preprint arXiv:1801.01290 (2018).](https://arxiv.org/pdf/1801.01290)
 
