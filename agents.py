@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import time
 import random
@@ -9,56 +7,40 @@ import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
 import gym
-from gym import spaces
 from PIL import Image
 from collections import deque, namedtuple
 
 from IPython import display
 import matplotlib.pyplot as plt
 
-from atari_wrappers import wrap_deepmind
 from methods import *
 
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
-############################## Atari agent template ##############################
+############################## Snake agent template ##############################
 
-class AtariAgent:
+class Agent:
     
-    def __init__(self, game_id, state_shape=[84, 84, 4], model_name="baseline_agent"):
-        """Class for training and evaluating DQN agent on Atari games
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5], 
+                 save_path="rl_models", model_name="agent"):
         
-        Parameters
-        ----------
-        state_shape: list
-            list of 3 parameters [frame_w, frame_h, num_channels]
-            frame_w: frame width
-            frame_h: frame height
-            num_channels: number of channels
-        model_name: str
-            name of the model
-        """
-        
-        # create instance of the environment
-        self.game_id = game_id + "NoFrameskip-v4"
-        self.train_env = wrap_deepmind(gym.make(self.game_id))
-        self.num_actions = self.train_env.unwrapped.action_space.n
-        
-        self.path = "snake_models/" + model_name
+        self.train_env = env
+        self.num_actions = num_actions
+            
+        self.path = save_path + "/" + model_name
         if not os.path.exists(self.path):
             os.makedirs(self.path)
             
     def init_weights(self):
         
-        self.init = tf.global_variables_initializer()
+        global_vars = tf.global_variables(scope="agent")+tf.global_variables(scope="target")
+        self.init = tf.variables_initializer(global_vars)
         self.saver = tf.train.Saver()
         
-        all_vars = tf.trainable_variables()
-        num_vars = len(all_vars) // 2
-        self.agent_vars = all_vars[:num_vars]
-        self.target_vars = all_vars[num_vars:]
+        self.agent_vars = tf.trainable_variables(scope="agent")
+        self.target_vars = tf.trainable_variables(scope="target")
         
     def set_parameters(self, 
                        replay_memory_size=50000,
@@ -69,24 +51,20 @@ class AtariAgent:
                        discount_factor=0.99,
                        max_episode_length=2000):
         
-        # create experience replay and fill it with samples drawn from random policy 
+        # create experience replay and fill it with random policy samples
         self.rep_buffer = ReplayMemory(replay_memory_size)
         frame_count = 0
         while (frame_count < replay_start_size):
             s = self.train_env.reset()
             for time_step in range(max_episode_length):
                 a = np.random.randint(self.num_actions)
-                s_, r, end, _ = self.train_env.step(a)
-                self.rep_buffer.push(s, a, r, s_, end)
+                s_, r, done = self.train_env.step(a)[:3]
+                self.rep_buffer.push(s, a, np.sign(r), s_, done)
                 s = s_
                 frame_count += 1
-                if end:
-                    if self.train_env.unwrapped.ale.lives() == 0: break
-                    else: s = self.train_env.reset()
-            self.train_env.unwrapped.reset()
+                if done: break
         
         # define epsilon decrement schedule for exploration
-        # in case of boltzmann exploration eps is temperature
         self.eps = init_eps
         self.final_eps = final_eps
         self.eps_drop = (init_eps - final_eps) / annealing_steps
@@ -112,13 +90,13 @@ class AtariAgent:
         
         with tf.Session(config=config) as sess:
             
-            # either train model from scratch or load it from disk
             if from_epoch == 0:
                 sess.run(self.init)
                 train_rewards = []
                 frame_counts = []
                 frame_count = 0
-                num_epochs = 0   
+                num_epochs = 0
+                
             else:
                 self.saver.restore(sess, self.path+"/model-"+str(from_epoch))
                 train_rewards = list(np.load(self.path+"/learning_curve.npz")["r"])
@@ -129,6 +107,7 @@ class AtariAgent:
             episode_count = 0
             ep_lifetimes = []
         
+            
             while num_epochs < max_num_epochs:
                 
                 train_ep_reward = 0
@@ -137,14 +116,14 @@ class AtariAgent:
                 s = self.train_env.reset()
                 for time_step in range(self.max_ep_length):
                     
-                    # choose action according to exploration strategy
+                    # choose action e-greedily
                     a = self.choose_action(sess, s, exploration)
                         
                     # make step in the environment    
-                    s_, r, end, _ = self.train_env.step(a)
+                    s_, r, done = self.train_env.step(a)[:3]
                     
                     # save transition into experience replay
-                    self.rep_buffer.push(s, a, r, s_, end)
+                    self.rep_buffer.push(s, a, np.sign(r), s_, done)
                     
                     # update current state and statistics
                     s = s_
@@ -161,27 +140,24 @@ class AtariAgent:
                         batch = self.rep_buffer.get_batch(batch_size)
                         self.update_agent_weights(sess, batch)
                         
-                    # update target network
-                    if tau == 1:
-                        if frame_count % target_update_freq == 0:
-                            self.update_target_weights(sess, target_ops)
-                    else: self.update_target_weights(sess, target_ops)
+                        # update target network
+                        if tau == 1:
+                            if frame_count % target_update_freq == 0:
+                                self.update_target_weights(sess, target_ops)
+                        else: self.update_target_weights(sess, target_ops)
                     
-                    # make checkpoint of network weights and save learning curve
+                    # make checkpoints of network weights and save learning curve
                     if frame_count % save_freq == 1:
                         num_epochs += 1
                         try:
                             self.saver.save(sess, self.path+"/model", global_step=num_epochs)
-                            np.savez(self.path+"/learning_curve.npz", 
-                                     r=train_rewards, f=frame_counts, l=ep_lifetimes)
+                            np.savez(self.path+"/learning_curve.npz", r=train_rewards, 
+                                     f=frame_counts, l=ep_lifetimes)
                         except: pass
                     
                     # if game is over, reset the environment
-                    if end:
-                        if self.train_env.unwrapped.ale.lives() == 0: break
-                        else: s = self.train_env.reset()
-                self.train_env.unwrapped.reset()
-                         
+                    if done: break
+
                 episode_count += 1
                 train_rewards.append(train_ep_reward)
                 frame_counts.append(frame_count)
@@ -211,10 +187,13 @@ class AtariAgent:
             logits = q_values / self.eps
             probs = softmax(logits).ravel()
             a = np.random.choice(self.num_actions, p=probs)
+        elif (exploration == "policy"):
+            probs = self.agent_net.get_p_values(sess, [s]).ravel()
+            a = np.random.choice(self.num_actions, p=probs)
         else:
             return 0
-        return a   
-                    
+        return a
+                           
     def update_agent_weights(self, sess, batch):
         
         # estimate the right hand side of Bellman equation
@@ -269,80 +248,89 @@ class AtariAgent:
     
 ############################## Deep Q-Network agent ##############################
 
-class AtariDQNAgent(AtariAgent):
+class DQNAgent(Agent):
     
-    def __init__(self, game_id, state_shape=[84, 84, 4],
-                 convs=[[32, 8, 4], [64, 4, 2], [64, 3, 1]], 
-                 fully_connected=[512],
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5], 
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[128],
+                 activation_fn=tf.nn.relu,
                  optimizer=tf.train.AdamOptimizer(2.5e-4),
-                 model_name="DQN"):
+                 save_path="rl_models", model_name="DQN"):
         
-        super(AtariDQNAgent, self).__init__(game_id=game_id,
-                                            state_shape=state_shape,
-                                            model_name=model_name)
+        super(DQNAgent, self).__init__(env, num_actions, 
+                                       state_shape=state_shape,
+                                       save_path=save_path,
+                                       model_name=model_name)
         
         tf.reset_default_graph()
-        self.agent_net = QNetwork(self.num_actions, state_shape=state_shape,
-                                  convs=convs, fully_connected=fully_connected, 
-                                  optimizer=optimizer, scope="agent")
-        self.target_net = QNetwork(self.num_actions, state_shape=state_shape,
-                                   convs=convs, fully_connected=fully_connected, 
-                                   optimizer=optimizer, scope="target")
-        self.init_weights()
-        
-############################## Deep Q-Network agent ##############################
-
-class AtariDuelDQNAgent(AtariAgent):
-    
-    def __init__(self, game_id, state_shape=[84, 84, 4],
-                 convs=[[32, 8, 4], [64, 4, 2], [64, 3, 1]], 
-                 fully_connected=[512],
-                 optimizer=tf.train.AdamOptimizer(2.5e-4),
-                 model_name="DQN"):
-        
-        super(AtariDuelDQNAgent, self).__init__(game_id=game_id,
-                                                state_shape=state_shape,
-                                                model_name=model_name)
-        
-        tf.reset_default_graph()
-        self.agent_net = DuelQNetwork(self.num_actions, state_shape=state_shape,
+        self.agent_net = DeepQNetwork(self.num_actions, state_shape=state_shape,
                                       convs=convs, fully_connected=fully_connected,
-                                      optimizer=optimizer, scope="agent")
-        self.target_net = DuelQNetwork(self.num_actions, state_shape=state_shape,
+                                      activation_fn=activation_fn, optimizer=optimizer, 
+                                      scope="agent")
+        self.target_net = DeepQNetwork(self.num_actions, state_shape=state_shape,
                                        convs=convs, fully_connected=fully_connected,
-                                       optimizer=optimizer, scope="target")
+                                       activation_fn=activation_fn, optimizer=optimizer, 
+                                       scope="target")
         self.init_weights()
+          
+########################## Dueling Deep Q-Network agent ##########################
 
-############################## Distributional agent ##############################
-
-class AtariDistDQNAgent(AtariAgent):
+class DuelDQNAgent(Agent):
     
-    def __init__(self, game_id, state_shape=[84, 84, 4],
-                 convs=[[32, 8, 4], [64, 4, 2], [64, 3, 1]], 
-                 fully_connected=[512],
-                 num_atoms=21,
-                 v=(-10, 10),
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5], 
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[64],
+                 activation_fn=tf.nn.relu,
+                 optimizer=tf.train.AdamOptimizer(2.5e-4),
+                 save_path="rl_models", model_name="DQN"):
+        
+        super(DuelDQNAgent, self).__init__(env, num_actions,
+                                           state_shape=state_shape,
+                                           save_path=save_path,
+                                           model_name=model_name)
+        
+        tf.reset_default_graph()
+        self.agent_net = DuelingDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                             convs=convs, fully_connected=fully_connected,
+                                             activation_fn=activation_fn, optimizer=optimizer, 
+                                             scope="agent")
+        self.target_net = DuelingDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                              convs=convs, fully_connected=fully_connected,
+                                              activation_fn=activation_fn, optimizer=optimizer, 
+                                              scope="target")
+        self.init_weights()
+        
+######################### Categorical Deep Q-Network agent #######################
+        
+class CatDQNAgent(Agent):
+    
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5],
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[128],
+                 activation_fn=tf.nn.relu,
+                 num_atoms=21, v=(-10, 10),
                  optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
-                 model_name="DistDQN"):
+                 save_path="rl_models", model_name="CatDQN"):
 
-        super(AtariDistDQNAgent, self).__init__(game_id=game_id, 
-                                                state_shape=state_shape,
-                                                model_name=model_name)
+        super(CatDQNAgent, self).__init__(env, num_actions, 
+                                          state_shape=state_shape,
+                                          save_path=save_path,
+                                          model_name=model_name)
 
         tf.reset_default_graph()
-        self.agent_net = DistQNetwork(self.num_actions, state_shape=state_shape,
-                                      convs=convs, fully_connected=fully_connected,
-                                      num_atoms=num_atoms, v=v,
-                                      optimizer=optimizer, scope="agent")
-        self.target_net = DistQNetwork(self.num_actions, state_shape=state_shape,
-                                       convs=convs, fully_connected=fully_connected,
-                                       num_atoms=num_atoms, v=v,
-                                       optimizer=optimizer, scope="target")
+        self.agent_net = CategoricalDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                 convs=convs, fully_connected=fully_connected,
+                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms, v=v,
+                                                 optimizer=optimizer, scope="agent")
+        self.target_net = CategoricalDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                  convs=convs, fully_connected=fully_connected,
+                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms, v=v,
+                                                  optimizer=optimizer, scope="target")
         self.init_weights()
 
     def update_agent_weights(self, sess, batch):
 
-        # estimate the projection of the right hand side of Bellman equation
+        # estimate categorical projection of the RHS of Bellman equation
         max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
         target_m = self.target_net.cat_proj(sess, batch.r, batch.s_,
                                             max_actions, batch.end,
@@ -350,3 +338,59 @@ class AtariDistDQNAgent(AtariAgent):
 
         # update agent network
         self.agent_net.update(sess, batch.s, batch.a, target_m)
+
+############################# Soft Actor-Critic agent ############################
+
+class SACAgent(Agent):
+    
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5], 
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[128],
+                 activation_fn=tf.nn.relu,
+                 temperature=1,
+                 optimizers=[tf.train.AdamOptimizer(2.5e-4), 
+                             tf.train.AdamOptimizer(2.5e-4),
+                             tf.train.AdamOptimizer(2.5e-4)],
+                 save_path="rl_models", model_name="SAC"):
+        
+        super(SACAgent, self).__init__(env, num_actions,
+                                       state_shape=state_shape,
+                                       save_path=save_path,
+                                       model_name=model_name)
+        
+        tf.reset_default_graph()
+        self.agent_net = SoftActorCriticNetwork(self.num_actions, state_shape=state_shape,
+                                                convs=convs, fully_connected=fully_connected,
+                                                activation_fn=activation_fn, 
+                                                optimizers=optimizers, scope="agent")
+        self.target_net = SoftActorCriticNetwork(self.num_actions, state_shape=state_shape,
+                                                 convs=convs, fully_connected=fully_connected,
+                                                 activation_fn=activation_fn, 
+                                                 optimizers=optimizers, scope="target")
+        self.init_weights()
+        self.t = temperature
+        
+    def update_agent_weights(self, sess, batch):
+        
+        probs = self.agent_net.get_p_values(sess, batch.s)
+        c = probs.cumsum(axis=1)
+        u = np.random.rand(len(c), 1)
+        actions = (u < c).argmax(axis=1)
+
+        v_values = self.agent_net.get_v_values(sess, batch.s).reshape(-1)
+        v_values_next = self.target_net.get_v_values(sess, batch.s_).reshape(-1)
+        q_values = self.agent_net.get_q_values(sess, batch.s)
+        p_logits = self.agent_net.get_p_logits(sess, batch.s)
+        
+        x = np.arange(self.batch_size)
+        q_values_selected = q_values[x, actions]
+        p_logits_selected = p_logits[x, actions]
+        
+        q_targets = batch.r / self.t + self.gamma * v_values_next * batch.end
+        v_targets = q_values_selected - p_logits_selected
+        p_targets = q_values_selected - v_values
+
+        # update agent network
+        self.agent_net.update_q(sess, batch.s, batch.a, q_targets)
+        self.agent_net.update_v(sess, batch.s, v_targets)
+        self.agent_net.update_p(sess, batch.s, actions, p_targets)
