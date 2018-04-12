@@ -13,7 +13,9 @@ Algorithms available in methods:
 ![alt text](/img/dqn_categorical.png)
 
 - Soft Actor-Critic [Haarnoja, Tuomas, et al. "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor." arXiv preprint arXiv:1801.01290 (2018).](https://arxiv.org/pdf/1801.01290)
+
+<p align="center">
 <img src="/img/sac_v_network.png" width="80%" class="center">
 <img src="/img/sac_q_network.png" width="80%" class="center">
 <img src="/img/sac_p_network.png" width="80%" class="center">
-
+</p>
