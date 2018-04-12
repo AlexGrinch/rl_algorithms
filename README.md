@@ -4,6 +4,7 @@ Implementations of different reinforcement learning algorithms
 Algorithms available in methods:
 
 - Deep Q-Network [Mnih, Volodymyr, et al. "Human-level control through deep reinforcement learning." Nature (2015)](https://pra.open.tips/storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf)
+![alt text](/img/dqn_classic.png)
 
 - Dueling Deep Q-Network [Wang, Ziyu, et al. "Dueling network architectures for deep reinforcement learning." ICML (2016).](https://arxiv.org/pdf/1511.06581.pdf)
 
