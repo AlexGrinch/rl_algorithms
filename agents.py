@@ -1,25 +1,15 @@
 import os
 import time
-import random
-import numpy as np
-
-import tensorflow as tf
-import tensorflow.contrib.layers as layers
-
-import gym
-from PIL import Image
-from collections import deque, namedtuple
 
 from IPython import display
 import matplotlib.pyplot as plt
 
 from methods import *
+from utils import *
 
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
-
-############################## Snake agent template ##############################
 
 class Agent:
     
@@ -49,20 +39,27 @@ class Agent:
                        final_eps=0.02,
                        annealing_steps=100000,
                        discount_factor=0.99,
-                       max_episode_length=2000):
+                       max_episode_length=2000,
+                       frame_history_len=1):
         
         # create experience replay and fill it with random policy samples
-        self.rep_buffer = ReplayMemory(replay_memory_size)
+        self.rep_buffer = ReplayBuffer(size=replay_memory_size, 
+                                       frame_history_len=frame_history_len)
         frame_count = 0
         while (frame_count < replay_start_size):
-            s = self.train_env.reset()
+            last_obs = self.train_env.reset()
             for time_step in range(max_episode_length):
-                a = np.random.randint(self.num_actions)
-                s_, r, done = self.train_env.step(a)[:3]
-                self.rep_buffer.push(s, a, np.sign(r), s_, done)
-                s = s_
+                
+                last_idx = self.rep_buffer.store_frame(last_obs)
+                recent_obs = self.rep_buffer.encode_recent_observation()
+                action = np.random.randint(self.num_actions)
+                obs, reward, done = self.train_env.step(action)[:3]
+                self.rep_buffer.store_effect(last_idx, action, np.sign(reward), done)
+
                 frame_count += 1
-                if done: break
+                
+                if done: break    
+                last_obs = obs
         
         # define epsilon decrement schedule for exploration
         self.eps = init_eps
@@ -113,22 +110,24 @@ class Agent:
                 train_ep_reward = 0
                 
                 # reset the environment / start new game
-                s = self.train_env.reset()
+                last_obs = self.train_env.reset()
                 for time_step in range(self.max_ep_length):
                     
+                    last_idx = self.rep_buffer.store_frame(last_obs)
+                    recent_obs = self.rep_buffer.encode_recent_observation()
+                    
                     # choose action e-greedily
-                    a = self.choose_action(sess, s, exploration)
+                    action = self.choose_action(sess, recent_obs, exploration)
                         
                     # make step in the environment    
-                    s_, r, done = self.train_env.step(a)[:3]
-                    
+                    obs, reward, done = self.train_env.step(action)[:3]
+                                        
                     # save transition into experience replay
-                    self.rep_buffer.push(s, a, np.sign(r), s_, done)
+                    self.rep_buffer.store_effect(last_idx, action, np.sign(reward), done)
                     
                     # update current state and statistics
-                    s = s_
                     frame_count += 1
-                    train_ep_reward += r
+                    train_ep_reward += reward
                     
                     # reduce epsilon according to schedule
                     if self.eps > self.final_eps:
@@ -137,7 +136,7 @@ class Agent:
                     # update network weights
                     if frame_count % agent_update_freq == 0:
                         
-                        batch = self.rep_buffer.get_batch(batch_size)
+                        batch = self.rep_buffer.sample(batch_size)
                         self.update_agent_weights(sess, batch)
                         
                         # update target network
@@ -157,6 +156,7 @@ class Agent:
                     
                     # if game is over, reset the environment
                     if done: break
+                    last_obs = obs
 
                 episode_count += 1
                 train_rewards.append(train_ep_reward)
@@ -200,7 +200,7 @@ class Agent:
         max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
         q_values = self.target_net.get_q_values(sess, batch.s_)
         double_q = q_values[np.arange(self.batch_size), max_actions]
-        targets = batch.r + (self.gamma * double_q * batch.end)
+        targets = batch.r + (self.gamma * double_q * (1 - batch.done))
 
         # update agent network
         self.agent_net.update(sess, batch.s, batch.a, targets)
@@ -244,6 +244,8 @@ class Agent:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True
+            config.intra_op_parallelism_threads = 1
+            config.inter_op_parallelism_threads= 1
         return config
     
 ############################## Deep Q-Network agent ##############################
@@ -333,12 +335,12 @@ class CatDQNAgent(Agent):
         # estimate categorical projection of the RHS of Bellman equation
         max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
         target_m = self.target_net.cat_proj(sess, batch.r, batch.s_,
-                                            max_actions, batch.end,
+                                            max_actions, batch.done,
                                             gamma=self.gamma)
 
         # update agent network
         self.agent_net.update(sess, batch.s, batch.a, target_m)
-
+            
 ############################# Soft Actor-Critic agent ############################
 
 class SACAgent(Agent):
@@ -386,7 +388,7 @@ class SACAgent(Agent):
         q_values_selected = q_values[x, actions]
         p_logits_selected = p_logits[x, actions]
         
-        q_targets = batch.r / self.t + self.gamma * v_values_next * batch.end
+        q_targets = batch.r / self.t + self.gamma * v_values_next * (1 - batch.done)
         v_targets = q_values_selected - p_logits_selected
         p_targets = q_values_selected - v_values
 

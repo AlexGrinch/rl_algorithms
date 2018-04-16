@@ -5,7 +5,6 @@ import tensorflow.contrib.layers as layers
 from tensorflow.contrib.layers import convolution2d as conv
 from tensorflow.contrib.layers import fully_connected as fc
 from tensorflow.contrib.layers import xavier_initializer as xavier
-from collections import deque, namedtuple
 
 ####################################################################################################
 ########################################### Core modules ###########################################
@@ -134,14 +133,12 @@ class DuelingDeepQNetwork:
             val, adv = tf.split(out, num_or_size_splits=2, axis=3)
             
             with tf.variable_scope(scope+"/value", reuse=reuse):
-                val = layers.flatten(val)
-                val = fc_module(val, fully_connected, activation_fn)
-                self.v_values = func_module(val, fully_connected[-1], 1)
+                self.v_values = full_module(val, [], fully_connected,
+                                            1, activation_fn)
                 
             with tf.variable_scope(scope+"/advantage", reuse=reuse):
-                adv = layers.flatten(adv)
-                adv = fc_module(adv, fully_connected, activation_fn)
-                self.a_values = func_module(adv, fully_connected[-1], num_actions)
+                self.a_values = full_module(adv, [], fully_connected,
+                                            num_actions, activation_fn)
                 
             a_values_mean = tf.reduce_mean(self.a_values, axis=1, keepdims=True)
             a_values_centered = tf.subtract(self.a_values, a_values_mean)
@@ -257,7 +254,7 @@ class CategoricalDeepQNetwork:
                      self.targets:targets}
         sess.run(self.update_model, feed_dict)
 
-    def cat_proj(self, sess, rewards, states_, actions_, end, gamma=0.99):
+    def cat_proj(self, sess, rewards, states_, actions_, done, gamma=0.99):
         """
         Categorical algorithm from https://arxiv.org/abs/1707.06887
         """
@@ -266,11 +263,11 @@ class CategoricalDeepQNetwork:
         probs = sess.run(self.probs_selected, feed_dict=feed_dict)
         m = np.zeros_like(probs)
         rewards = np.array(rewards, dtype=np.float32)
-        end = np.array(end, dtype=np.float32)
+        done = np.array(done, dtype=np.float32)
         batch_size = rewards.size
 
         for j in range(self.num_atoms):
-            Tz = rewards + gamma * end * self.z[j]
+            Tz = rewards + gamma * (1 - done) * self.z[j]
             Tz = np.minimum(self.v_max, np.maximum(self.v_min, Tz))
             b = (Tz - self.v_min) / self.delta_z
             l = np.floor(b)
@@ -313,7 +310,7 @@ class SoftActorCriticNetwork:
             with tf.variable_scope("policy", reuse=reuse):
                 self.p_logits = full_module(self.input_states, convs, fully_connected,
                                             num_actions, activation_fn)
-            self.p_values = layers.softmax(self.p_logits)
+                self.p_values = layers.softmax(self.p_logits)
 
             ######################### Optimization procedure ########################
 
@@ -391,47 +388,4 @@ class SoftActorCriticNetwork:
         feed_dict = {self.input_states:states,
                      self.input_actions:actions,
                      self.p_targets:p_targets}
-        sess.run(self.update_p_logits, feed_dict)
-
-####################################################################################################
-######################################## Experience Replay #########################################
-####################################################################################################        
-        
-class ReplayMemory:
-
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
-        self.transition = namedtuple('Transition',
-                                     ('s', 'a', 'r', 's_', 'end'))
-
-    def push(self, *args):
-        """ push single transition into buffer
-        """
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = [*args]
-        self.position = (self.position + 1) % self.capacity
-        
-    def push_episode(self, episode_list):
-        """ push whole episode into buffer
-        """
-        self.memory += episode_list
-        gap = len(self.memory) - self.capacity
-        if gap > 0:
-            self.memory[:gap] = []
-
-        
-    def get_batch(self, batch_size):
-        batch = random.sample(self.memory, batch_size)
-        batch = np.reshape(batch, [batch_size, 5])
-        s = np.stack(batch[:,0])
-        a = batch[:,1]
-        r = batch[:,2]
-        s_ = np.stack(batch[:,3])
-        end = 1 - batch[:,4]
-        return self.transition(s, a, r, s_, end)
-
-    def __len__(self):
-        return len(self.memory)
+        sess.run(self.update_p_logits, feed_dict) 
