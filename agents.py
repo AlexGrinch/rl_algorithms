@@ -284,7 +284,7 @@ class DuelDQNAgent(Agent):
                  fully_connected=[64],
                  activation_fn=tf.nn.relu,
                  optimizer=tf.train.AdamOptimizer(2.5e-4),
-                 save_path="rl_models", model_name="DQN"):
+                 save_path="rl_models", model_name="DuelDQN"):
         
         super(DuelDQNAgent, self).__init__(env, num_actions,
                                            state_shape=state_shape,
@@ -396,3 +396,41 @@ class SACAgent(Agent):
         self.agent_net.update_q(sess, batch.s, batch.a, q_targets)
         self.agent_net.update_v(sess, batch.s, v_targets)
         self.agent_net.update_p(sess, batch.s, actions, p_targets)
+        
+##################### Quantile Regression Deep Q-Network agent ###################
+        
+class QuantRegDQNAgent(Agent):
+    
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5],
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[128],
+                 activation_fn=tf.nn.relu,
+                 num_atoms=50, kappa=1,
+                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
+                 save_path="rl_models", model_name="QuantRegDQN"):
+
+        super(QuantRegDQNAgent, self).__init__(env, num_actions,
+                                               state_shape=state_shape,
+                                               save_path=save_path,
+                                               model_name=model_name)
+
+        tf.reset_default_graph()
+        self.agent_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                 convs=convs, fully_connected=fully_connected,
+                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms,
+                                                 kappa=kappa, optimizer=optimizer, scope="agent")
+        self.target_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                  convs=convs, fully_connected=fully_connected,
+                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms,
+                                                  kappa=kappa, optimizer=optimizer, scope="target")
+        self.init_weights()
+
+    def update_agent_weights(self, sess, batch):
+
+        # calculate target atoms produced by Bellman operator
+        max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
+        next_atoms = self.target_net.get_atoms_for_actions(sess, batch.s_, max_actions)
+        target_atoms = batch.r.reshape(-1, 1) + self.gamma * next_atoms
+
+        # update agent network
+        self.agent_net.update(sess, batch.s, batch.a, target_atoms)

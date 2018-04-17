@@ -18,6 +18,11 @@ Algorithms available in methods:
 <img src="/img/dqn_categorical.png" width="80%">
 </p>
 
+- Quantile Regression Deep Q-Network [Dabney, Will, Mark Rowland, Marc G. Bellemare, and Rémi Munos. "Distributional Reinforcement Learning with Quantile Regression." AAAI (2018).](https://arxiv.org/pdf/1710.10044)
+<p align="center">
+<img src="/img/dqn_quantile.png" width="80%">
+</p>
+
 - Soft Actor-Critic [Haarnoja, Tuomas, et al. "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor." arXiv preprint arXiv:1801.01290 (2018).](https://arxiv.org/pdf/1801.01290)
 
 <p align="center">

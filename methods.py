@@ -389,3 +389,102 @@ class SoftActorCriticNetwork:
                      self.input_actions:actions,
                      self.p_targets:p_targets}
         sess.run(self.update_p_logits, feed_dict) 
+        
+####################################################################################################
+################################ Qantile Regression Deep Q-Network #################################
+####################################################################################################
+
+class QuantileRegressionDeepQNetwork:
+    
+    def __init__(self, num_actions, state_shape=[8, 8, 5],
+                 convs=[[32, 4, 2], [64, 2, 1]],
+                 fully_connected=[128], 
+                 num_atoms=50, kappa=1,
+                 activation_fn=tf.nn.relu,
+                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
+                 scope="qr_dqn", reuse=False):
+        
+        with tf.variable_scope(scope, reuse=reuse):
+
+            ###################### Neural network architecture ######################
+
+            input_shape = [None] + state_shape
+            self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
+        
+            # distribution parameters
+            self.num_atoms = num_atoms
+            self.tau_min = 1 / (2 * num_atoms) 
+            self.delta_tau = 1 / num_atoms
+            self.tau = [self.tau_min + i * self.delta_tau for i in range(self.num_atoms)]
+            
+            # reshape tau to matrix for fast loss calculation
+            tau_tensor = tf.convert_to_tensor(self.tau, dtype=tf.float32)
+            tau_matrix = tf.tile(tau_tensor, [num_atoms])
+            self.tau_matrix = tf.reshape(tau_matrix, shape=[num_atoms, num_atoms])
+            
+            # main module
+            out = conv_module(self.input_states, convs, activation_fn)
+            out = layers.flatten(out)
+            out = fc_module(out, fully_connected, activation_fn)
+            out = fc_module(out, [num_actions * self.num_atoms], None)
+            self.atoms = tf.reshape(out, shape=[-1, num_actions, self.num_atoms])
+            self.q_values = tf.reduce_mean(self.atoms, axis=2)
+
+            ######################### Optimization procedure ########################
+
+            # one-hot encode actions to get q-values and atoms of state-action pairs
+            self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])
+            actions_onehot = tf.one_hot(self.input_actions, num_actions, dtype=tf.float32)
+            actions_onehot_reshaped = tf.reshape(actions_onehot, [-1, num_actions, 1])
+
+            # choose best actions (according to q-values)
+            q_values_selected = tf.reduce_sum(tf.multiply(self.q_values, actions_onehot), axis=1)
+            self.q_argmax = tf.argmax(self.q_values, axis=1)
+            
+            # reshape chosen atoms to matrix for fast loss calculation
+            atoms_selected = tf.multiply(self.atoms, actions_onehot_reshaped)
+            self.atoms_selected = tf.reduce_sum(atoms_selected, axis=1)
+            atoms_matrix = tf.tile(self.atoms_selected, [1, num_atoms])
+            self.atoms_matrix = tf.reshape(atoms_matrix, shape=[-1, num_atoms, num_atoms])
+            
+            # reshape target atoms to matrix for fast loss calculation
+            self.target_atoms = tf.placeholder(dtype=tf.float32, shape=[None, self.num_atoms])
+            targets_matrix = tf.tile(self.target_atoms, [1, num_atoms])
+            targets_matrix = tf.reshape(targets_matrix, shape=[-1, num_atoms, num_atoms])
+            self.targets_matrix = tf.transpose(targets_matrix, perm=[0, 2, 1])
+            
+            # create loss function and update rule
+            atoms_diff = self.targets_matrix - self.atoms_matrix
+            delta_atoms_diff = tf.where(atoms_diff<0, tf.zeros_like(atoms_diff), tf.ones_like(atoms_diff))
+            huber_weights = tf.abs(self.tau_matrix - delta_atoms_diff)
+            loss = tf.losses.huber_loss(self.targets_matrix, self.atoms_matrix, weights=huber_weights,
+                                        delta=kappa, reduction=tf.losses.Reduction.SUM)
+            self.loss = (1 / num_atoms) * loss
+            self.update_model = optimizer.minimize(self.loss)
+
+    def get_atoms(self, sess, states):
+        feed_dict = {self.input_states:states}
+        atoms = sess.run(self.atoms, feed_dict)
+        return probs
+    
+    def get_atoms_for_actions(self, sess, states, actions):
+        feed_dict = {self.input_states:states, self.input_actions:actions}
+        atoms_selected = sess.run(self.atoms_selected, feed_dict)
+        return atoms_selected
+
+    def get_q_argmax(self, sess, states):
+        feed_dict = {self.input_states:states}
+        q_argmax = sess.run(self.q_argmax, feed_dict)
+        return q_argmax
+
+    def get_q_values(self, sess, states):
+        feed_dict = {self.input_states:states}
+        q_values = sess.run(self.q_values, feed_dict)
+        return q_values
+
+    def update(self, sess, states, actions, target_atoms):
+
+        feed_dict = {self.input_states:states,
+                     self.input_actions:actions,
+                     self.target_atoms:target_atoms}
+        sess.run(self.update_model, feed_dict)
