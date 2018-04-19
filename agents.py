@@ -405,7 +405,7 @@ class QuantRegDQNAgent(Agent):
                  convs=[[16, 2, 1], [32, 1, 1]], 
                  fully_connected=[128],
                  activation_fn=tf.nn.relu,
-                 num_atoms=50, kappa=1,
+                 num_atoms=50, kappa=1.0,
                  optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
                  save_path="rl_models", model_name="QuantRegDQN"):
 

@@ -399,7 +399,7 @@ class QuantileRegressionDeepQNetwork:
     def __init__(self, num_actions, state_shape=[8, 8, 5],
                  convs=[[32, 4, 2], [64, 2, 1]],
                  fully_connected=[128], 
-                 num_atoms=50, kappa=1,
+                 num_atoms=50, kappa=1.0,
                  activation_fn=tf.nn.relu,
                  optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
                  scope="qr_dqn", reuse=False):
