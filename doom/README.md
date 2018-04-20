@@ -6,6 +6,10 @@ This is a gym-like wrapper over [VizDoom](http://vizdoom.cs.put.edu.pl) environm
 
 Here is the list of available scenarios (copied and adapted [from](https://github.com/mwydmuch/ViZDoom/blob/master/scenarios/README.md)):
 
+|![doom1](../img/doom1.png) | ![doom2](../img/doom2.png) | ![doom3](../img/doom3.png)
+|:---:|:---:|:---:|
+|**Basic**|**Defend the center**|**Defend the line**|
+
 ## Basic
 
 Map is a rectangle with gray walls, ceiling and floor. Player is spawned along the longer wall, in the center. A red, circular monster is spawned randomly somewhere along the opposite wall. Player can only go left/right and shoot. 1 hit is enough to kill the monster. Episode finishes when monster is killed or on timeout.
