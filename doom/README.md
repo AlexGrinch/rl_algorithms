@@ -2,15 +2,30 @@
 
 This is a gym-like wrapper over [VizDoom](http://vizdoom.cs.put.edu.pl) environment for deep reinforcement learning research. To install **vizdoom** python library, please follow the instructions from [VizDoom GitHub repository](https://github.com/mwydmuch/ViZDoom).
 
+```python
+from doom.environments import DoomBasic
+
+# create environment instance
+env = DoomBasic()
+
+# reset the environment and get preprocessed 84x84x1 observation
+obs = env.reset()
+
+# make step in the environment
+next_obs, reward, done = env.step(action)
+
+# get original RGB image of current observation
+rgb_obs = env.get_obs_rgb()
+```
+
 # Available scenarios
 
-Here is the list of available scenarios (copied and adapted [from](https://github.com/mwydmuch/ViZDoom/blob/master/scenarios/README.md)):
+Here is the list of available scenarios (copied and adapted from [here](https://github.com/mwydmuch/ViZDoom/blob/master/scenarios/README.md)):
 
-|![doom1](../img/doom_img/basic.png) | ![doom2](../img/doom_img/def_center.png) | ![doom3](../img/doom_img/def_line.png) |
+|![doom1](../img/doom_img/basic.png) | ![doom2](../img/doom_img/def_center.png) | ![doom3](../img/doom_img/def_line.png) 
 |:---:|:---:|:---:|
 |**Basic**|**Defend the center**|**Defend the line**|
-|![doom4](../img/doom_img/health.png) | ![doom5](../img/doom_img/predict.png) | ![doom6](../img/doom_img/corridor.png) |
-|:---:|:---:|:---:|
+|![doom4](../img/doom_img/health.png) | ![doom5](../img/doom_img/predict.png) | ![doom6](../img/doom_img/corridor.png)
 |**Health gathering**|**Predict the position**|**Deadly corridor**|
 
 ## Basic
