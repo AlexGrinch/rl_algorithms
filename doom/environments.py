@@ -23,7 +23,8 @@ class DoomEnvironment:
         obs = game_state.screen_buffer
         self.h, self.w = obs.shape[1:3]
         self.current_obs = self.preprocess_obs(obs)
-        self.ammo, self.health = game_state.game_variables
+        if self.game.get_available_game_variables_size() == 2:
+            self.ammo, self.health = game_state.game_variables
         return self.get_obs()
     
     def get_obs(self):
@@ -150,3 +151,27 @@ class DoomDefendTheCenter(DoomEnvironment):
         self.current_obs = new_obs
         
         return self.get_obs(), reward, done
+
+############################### Predict the position ################################ 
+
+class DoomPredictThePosition(DoomEnvironment):
+    
+    def __init__(self, path_to_config="doom"):
+        super(DoomPredictThePosition, self).__init__(scenario="predict_position",
+                                                     path_to_config=path_to_config)   
+        
+############################### Predict the position ################################ 
+
+class DoomHealthGathering(DoomEnvironment):
+    
+    def __init__(self, path_to_config="doom"):
+        super(DoomHealthGathering, self).__init__(scenario="health_gathering",
+                                                  path_to_config=path_to_config) 
+        
+############################### Predict the position ################################ 
+
+class DoomDeadlyCorridor(DoomEnvironment):
+    
+    def __init__(self, path_to_config="doom"):
+        super(DoomDeadlyCorridor, self).__init__(scenario="deadly_corridor",
+                                                 path_to_config=path_to_config) 
