@@ -1,7 +1,17 @@
 # rl_algorithms
 Implementations of different reinforcement learning algorithms
 
-Algorithms available in methods:
+# Framework 
+
+1. Module [methods.py](methods.py) contains [TensorFlow](https://www.tensorflow.org) implementations of various neural network architecture used in deep reinforcement learning.
+
+2. Module [agents.py](agents.py) contains general **Agent** class and various wrappers around it which represent corresponding deep RL algorithms.
+
+3. Module [utils.py](utils.py) contains **Replay Buffer** implementation together with a wrapper around **OpenAI gym Atari 2600** environment necessary for reproducing original DeepMind results.
+
+4. Jupyter notebook [train_agents.ipynb](train_agents.ipynb) contains examples of how to use the proposed framework to train deep RL agents on various environments.
+
+# Available algorithms
 
 - Deep Q-Network [Volodymyr Mnih et al. "Human-level control through deep reinforcement learning." Nature (2015)](https://pra.open.tips/storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf)
 <p align="center">
