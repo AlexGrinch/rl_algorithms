@@ -183,12 +183,12 @@ class Agent:
             else:
                 a = self.agent_net.get_q_argmax(sess, [s])     
         elif (exploration == "boltzmann"):
-            q_values = self.agent_net.get_q_values(sess, [s])
+            q_values = self.agent_net.get_q_values_s(sess, [s])
             logits = q_values / self.eps
             probs = softmax(logits).ravel()
             a = np.random.choice(self.num_actions, p=probs)
         elif (exploration == "policy"):
-            probs = self.agent_net.get_p_values(sess, [s]).ravel()
+            probs = self.agent_net.get_p_values_s(sess, [s]).ravel()
             a = np.random.choice(self.num_actions, p=probs)
         else:
             return 0
@@ -197,10 +197,9 @@ class Agent:
     def update_agent_weights(self, sess, batch):
         
         # estimate the right hand side of Bellman equation
-        max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
-        q_values = self.target_net.get_q_values(sess, batch.s_)
-        double_q = q_values[np.arange(self.batch_size), max_actions]
-        targets = batch.r + (self.gamma * double_q * (1 - batch.done))
+        agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
+        q_double = self.target_net.get_q_values_sa(sess, batch.s_, agent_actions)
+        targets = batch.r + (self.gamma * q_double * (1 - batch.done))
 
         # update agent network
         self.agent_net.update(sess, batch.s, batch.a, targets)
@@ -257,6 +256,7 @@ class DQNAgent(Agent):
                  fully_connected=[128],
                  activation_fn=tf.nn.relu,
                  optimizer=tf.train.AdamOptimizer(2.5e-4),
+                 gradient_clip=10.0,
                  save_path="rl_models", model_name="DQN"):
         
         super(DQNAgent, self).__init__(env, num_actions, 
@@ -268,11 +268,11 @@ class DQNAgent(Agent):
         self.agent_net = DeepQNetwork(self.num_actions, state_shape=state_shape,
                                       convs=convs, fully_connected=fully_connected,
                                       activation_fn=activation_fn, optimizer=optimizer, 
-                                      scope="agent")
+                                      gradient_clip=gradient_clip, scope="agent")
         self.target_net = DeepQNetwork(self.num_actions, state_shape=state_shape,
                                        convs=convs, fully_connected=fully_connected,
                                        activation_fn=activation_fn, optimizer=optimizer, 
-                                       scope="target")
+                                       gradient_clip=gradient_clip, scope="target")
         self.init_weights()
           
 ########################## Dueling Deep Q-Network agent ##########################
@@ -284,6 +284,7 @@ class DuelDQNAgent(Agent):
                  fully_connected=[64],
                  activation_fn=tf.nn.relu,
                  optimizer=tf.train.AdamOptimizer(2.5e-4),
+                 gradient_clip=10.0,
                  save_path="rl_models", model_name="DuelDQN"):
         
         super(DuelDQNAgent, self).__init__(env, num_actions,
@@ -295,11 +296,11 @@ class DuelDQNAgent(Agent):
         self.agent_net = DuelingDeepQNetwork(self.num_actions, state_shape=state_shape,
                                              convs=convs, fully_connected=fully_connected,
                                              activation_fn=activation_fn, optimizer=optimizer, 
-                                             scope="agent")
+                                             gradient_clip=gradient_clip, scope="agent")
         self.target_net = DuelingDeepQNetwork(self.num_actions, state_shape=state_shape,
                                               convs=convs, fully_connected=fully_connected,
                                               activation_fn=activation_fn, optimizer=optimizer, 
-                                              scope="target")
+                                              gradient_clip=gradient_clip, scope="target")
         self.init_weights()
         
 ######################### Categorical Deep Q-Network agent #######################
@@ -322,25 +323,63 @@ class CatDQNAgent(Agent):
         tf.reset_default_graph()
         self.agent_net = CategoricalDeepQNetwork(self.num_actions, state_shape=state_shape,
                                                  convs=convs, fully_connected=fully_connected,
-                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms, v=v,
-                                                 optimizer=optimizer, scope="agent")
+                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms, 
+                                                 v=v, optimizer=optimizer, scope="agent")
         self.target_net = CategoricalDeepQNetwork(self.num_actions, state_shape=state_shape,
                                                   convs=convs, fully_connected=fully_connected,
-                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms, v=v,
-                                                  optimizer=optimizer, scope="target")
+                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms, 
+                                                  v=v, optimizer=optimizer, scope="target")
         self.init_weights()
 
     def update_agent_weights(self, sess, batch):
 
         # estimate categorical projection of the RHS of Bellman equation
-        max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
-        target_m = self.target_net.cat_proj(sess, batch.r, batch.s_,
-                                            max_actions, batch.done,
-                                            gamma=self.gamma)
+        agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
+        probs_targets = self.target_net.cat_proj(sess, batch.r, batch.s_,
+                                                 agent_actions, batch.done,
+                                                 gamma=self.gamma)
 
         # update agent network
-        self.agent_net.update(sess, batch.s, batch.a, target_m)
-            
+        self.agent_net.update(sess, batch.s, batch.a, probs_targets)
+
+##################### Quantile Regression Deep Q-Network agent ###################
+        
+class QuantRegDQNAgent(Agent):
+    
+    def __init__(self, env, num_actions, state_shape=[8, 8, 5],
+                 convs=[[16, 2, 1], [32, 1, 1]], 
+                 fully_connected=[128],
+                 activation_fn=tf.nn.relu,
+                 num_atoms=50, kappa=1.0,
+                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
+                 save_path="rl_models", model_name="QuantRegDQN"):
+
+        super(QuantRegDQNAgent, self).__init__(env, num_actions,
+                                               state_shape=state_shape,
+                                               save_path=save_path,
+                                               model_name=model_name)
+
+        tf.reset_default_graph()
+        self.agent_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                 convs=convs, fully_connected=fully_connected,
+                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms,
+                                                 kappa=kappa, optimizer=optimizer, scope="agent")
+        self.target_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
+                                                  convs=convs, fully_connected=fully_connected,
+                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms,
+                                                  kappa=kappa, optimizer=optimizer, scope="target")
+        self.init_weights()
+
+    def update_agent_weights(self, sess, batch):
+
+        # calculate target atoms produced by Bellman operator
+        agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
+        next_atoms = self.target_net.get_atoms_sa(sess, batch.s_, agent_actions)
+        target_atoms = batch.r[:, None] + self.gamma * next_atoms * (1 - batch.done[:, None])
+
+        # update agent network
+        self.agent_net.update(sess, batch.s, batch.a, target_atoms)        
+        
 ############################# Soft Actor-Critic agent ############################
 
 class SACAgent(Agent):
@@ -374,15 +413,15 @@ class SACAgent(Agent):
         
     def update_agent_weights(self, sess, batch):
         
-        probs = self.agent_net.get_p_values(sess, batch.s)
+        probs = self.agent_net.get_p_values_s(sess, batch.s)
         c = probs.cumsum(axis=1)
         u = np.random.rand(len(c), 1)
         actions = (u < c).argmax(axis=1)
 
-        v_values = self.agent_net.get_v_values(sess, batch.s).reshape(-1)
-        v_values_next = self.target_net.get_v_values(sess, batch.s_).reshape(-1)
-        q_values = self.agent_net.get_q_values(sess, batch.s)
-        p_logits = self.agent_net.get_p_logits(sess, batch.s)
+        v_values = self.agent_net.get_v_values_s(sess, batch.s).reshape(-1)
+        v_values_next = self.target_net.get_v_values_s(sess, batch.s_).reshape(-1)
+        q_values = self.agent_net.get_q_values_s(sess, batch.s)
+        p_logits = self.agent_net.get_p_logits_s(sess, batch.s)
         
         x = np.arange(self.batch_size)
         q_values_selected = q_values[x, actions]
@@ -396,41 +435,3 @@ class SACAgent(Agent):
         self.agent_net.update_q(sess, batch.s, batch.a, q_targets)
         self.agent_net.update_v(sess, batch.s, v_targets)
         self.agent_net.update_p(sess, batch.s, actions, p_targets)
-        
-##################### Quantile Regression Deep Q-Network agent ###################
-        
-class QuantRegDQNAgent(Agent):
-    
-    def __init__(self, env, num_actions, state_shape=[8, 8, 5],
-                 convs=[[16, 2, 1], [32, 1, 1]], 
-                 fully_connected=[128],
-                 activation_fn=tf.nn.relu,
-                 num_atoms=50, kappa=1.0,
-                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
-                 save_path="rl_models", model_name="QuantRegDQN"):
-
-        super(QuantRegDQNAgent, self).__init__(env, num_actions,
-                                               state_shape=state_shape,
-                                               save_path=save_path,
-                                               model_name=model_name)
-
-        tf.reset_default_graph()
-        self.agent_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
-                                                 convs=convs, fully_connected=fully_connected,
-                                                 activation_fn=tf.nn.relu, num_atoms=num_atoms,
-                                                 kappa=kappa, optimizer=optimizer, scope="agent")
-        self.target_net = QuantileRegressionDeepQNetwork(self.num_actions, state_shape=state_shape,
-                                                  convs=convs, fully_connected=fully_connected,
-                                                  activation_fn=tf.nn.relu, num_atoms=num_atoms,
-                                                  kappa=kappa, optimizer=optimizer, scope="target")
-        self.init_weights()
-
-    def update_agent_weights(self, sess, batch):
-
-        # calculate target atoms produced by Bellman operator
-        max_actions = self.agent_net.get_q_argmax(sess, batch.s_)
-        next_atoms = self.target_net.get_atoms_for_actions(sess, batch.s_, max_actions)
-        target_atoms = batch.r.reshape(-1, 1) + self.gamma * next_atoms
-
-        # update agent network
-        self.agent_net.update(sess, batch.s, batch.a, target_atoms)
