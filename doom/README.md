@@ -2,6 +2,8 @@
 
 This is a gym-like wrapper over [VizDoom](http://vizdoom.cs.put.edu.pl) environment for deep reinforcement learning research. To install **vizdoom** python library, please follow the instructions from [VizDoom GitHub repository](https://github.com/mwydmuch/ViZDoom).
 
+## How to use
+
 ```python
 from doom.environments import DoomBasic
 
