@@ -1,9 +1,9 @@
 # rl_algorithms
-Implementations of different reinforcement learning algorithms
+Implementations of different off-policy reinforcement learning algorithms.
 
 # Framework 
 
-1. Module [methods.py](methods.py) contains [TensorFlow](https://www.tensorflow.org) implementations of various neural network architecture used in deep reinforcement learning.
+1. Module [methods.py](methods.py) contains [TensorFlow](https://www.tensorflow.org) implementations of various neural network architectures used in value-based deep reinforcement learning.
 
 2. Module [agents.py](agents.py) contains general **Agent** class and various wrappers around it which represent corresponding deep RL algorithms.
 
