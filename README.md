@@ -40,3 +40,5 @@ Implementations of different off-policy reinforcement learning algorithms.
 <img src="/img/sac_q_network.png" width="80%">
 <img src="/img/sac_p_network.png" width="80%">
 </p>
+
+**Note.** Images of different neural network architectures are based on the images from the [Dueling architectures](https://arxiv.org/pdf/1511.06581.pdf) paper. The original images were copied and adapted to reflect features of particular architectures and learning algorithms.
