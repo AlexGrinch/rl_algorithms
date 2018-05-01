@@ -120,7 +120,7 @@ class Snake:
         state[self.x[-2], self.y[-2], 2] = 1
         state[self.x[0], self.y[0], 3] = 1
         state[self.food[0], self.food[1], 4] = 1
-        return state
+        return state.astype(np.uint8)
         
     def generate_food(self):
         free = np.where(self.state == 0)

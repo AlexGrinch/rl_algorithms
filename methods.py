@@ -234,6 +234,7 @@ class CategoricalDeepQNetwork:
 
             # select q-values and probs for input actions
             self.q_values_selected = tf.gather_nd(self.q_values, action_indices)
+            self.logits_selected = tf.gather_nd(self.logits, action_indices)
             self.probs_selected = tf.gather_nd(self.probs, action_indices)
             
             # select best actions (according to q-values)
@@ -241,7 +242,7 @@ class CategoricalDeepQNetwork:
 
             # define loss function and update rule
             self.probs_targets = tf.placeholder(dtype=tf.float32, shape=[None, self.num_atoms])
-            self.loss = -tf.reduce_sum(self.probs_targets * tf.log(self.probs_selected + 1e-6))
+            self.loss = -tf.reduce_sum(self.probs_targets * self.logits_selected)
             self.update_model = optimizer.minimize(self.loss)
     
     def get_q_values_s(self, sess, states):

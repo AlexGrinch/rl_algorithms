@@ -54,7 +54,7 @@ class Agent:
                 recent_obs = self.rep_buffer.encode_recent_observation()
                 action = np.random.randint(self.num_actions)
                 obs, reward, done = self.train_env.step(action)[:3]
-                self.rep_buffer.store_effect(last_idx, action, np.sign(reward), done)
+                self.rep_buffer.store_effect(last_idx, action, reward, done)
 
                 frame_count += 1
                 
@@ -123,7 +123,7 @@ class Agent:
                     obs, reward, done = self.train_env.step(action)[:3]
                                         
                     # save transition into experience replay
-                    self.rep_buffer.store_effect(last_idx, action, np.sign(reward), done)
+                    self.rep_buffer.store_effect(last_idx, action, reward, done)
                     
                     # update current state and statistics
                     frame_count += 1
