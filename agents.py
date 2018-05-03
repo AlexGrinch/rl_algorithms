@@ -335,9 +335,8 @@ class CatDQNAgent(Agent):
 
         # estimate categorical projection of the RHS of Bellman equation
         agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
-        probs_targets = self.target_net.cat_proj(sess, batch.r, batch.s_,
-                                                 agent_actions, batch.done,
-                                                 gamma=self.gamma)
+        probs_targets = self.target_net.cat_proj(sess, batch.s_, agent_actions, batch.r, 
+                                                 batch.done, gamma=self.gamma)
 
         # update agent network
         self.agent_net.update(sess, batch.s, batch.a, probs_targets)

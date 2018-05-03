@@ -214,7 +214,7 @@ class CategoricalDeepQNetwork:
             self.num_atoms = num_atoms
             self.v_min, self.v_max = v
             self.delta_z = (self.v_max - self.v_min) / (self.num_atoms - 1)
-            self.z = [self.v_min + i * self.delta_z for i in range(self.num_atoms)]
+            self.z = np.linspace(start=self.v_min, stop=self.v_max, num=num_atoms)
             self.tensor_z = tf.convert_to_tensor(self.z, dtype=tf.float32)
 
             out = conv_module(self.input_states, convs, activation_fn)
@@ -242,7 +242,7 @@ class CategoricalDeepQNetwork:
 
             # define loss function and update rule
             self.probs_targets = tf.placeholder(dtype=tf.float32, shape=[None, self.num_atoms])
-            self.loss = -tf.reduce_sum(self.probs_targets * self.logits_selected)
+            self.loss = -tf.reduce_sum(self.probs_targets * tf.log(self.probs_selected+1e-6))
             self.update_model = optimizer.minimize(self.loss)
     
     def get_q_values_s(self, sess, states):
@@ -277,27 +277,27 @@ class CategoricalDeepQNetwork:
                      self.probs_targets:probs_targets}
         sess.run(self.update_model, feed_dict)
 
-    def cat_proj(self, sess, rewards, states_, actions_, done, gamma=0.99):
+        
+    def cat_proj(self, sess, states, actions, rewards, done, gamma=0.99):
         """
         Categorical algorithm from https://arxiv.org/abs/1707.06887
         """
 
-        probs = self.get_probs_sa(sess, states_, actions_)
-        m = np.zeros_like(probs)
-        rewards = np.array(rewards, dtype=np.float32)
-        done = np.array(done, dtype=np.float32)
-        batch_size = rewards.size
+        probs = self.get_probs_sa(sess, states, actions)
+        atoms_targets = rewards[:,None] + gamma * self.z * (1 - done[:,None])
 
-        for j in range(self.num_atoms):
-            Tz = rewards + gamma * (1 - done) * self.z[j]
-            Tz = np.minimum(self.v_max, np.maximum(self.v_min, Tz))
-            b = (Tz - self.v_min) / self.delta_z
-            l = np.floor(b)
-            u = np.ceil(b)
-            m[np.arange(batch_size), l.astype(int)] += probs[:,j] * (u - b)
-            m[np.arange(batch_size), u.astype(int)] += probs[:,j] * (b - l)
+        tz = np.clip(atoms_targets, self.v_min, self.v_max)
+        tz = np.tile(tz, [1, self.num_atoms])
+        tz = np.reshape(tz, [-1, self.num_atoms, self.num_atoms])
 
-        return m
+        z = np.tile(self.z[None,:], [1, self.num_atoms])
+        z = np.reshape(z, [1, self.num_atoms, self.num_atoms])
+        z = np.transpose(z, axes=[0, 2, 1])
+
+        tz_z = np.clip((1.0 - (np.abs(tz - z) / self.delta_z)), 0, 1)
+        probs_targets = np.einsum('bij,bj->bi', tz_z, probs)
+
+        return probs_targets  
         
 ####################################################################################################
 ################################ Qantile Regression Deep Q-Network #################################
