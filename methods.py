@@ -215,15 +215,14 @@ class CategoricalDeepQNetwork:
             self.v_min, self.v_max = v
             self.delta_z = (self.v_max - self.v_min) / (self.num_atoms - 1)
             self.z = np.linspace(start=self.v_min, stop=self.v_max, num=num_atoms)
-            self.tensor_z = tf.convert_to_tensor(self.z, dtype=tf.float32)
 
-            out = conv_module(self.input_states, convs, activation_fn)
-            out = layers.flatten(out)
-            out = fc_module(out, fully_connected, activation_fn)
-            out = fc_module(out, [num_actions * self.num_atoms], None)
-            self.logits = tf.reshape(out, shape=[-1, num_actions, self.num_atoms])
+            # main module
+            out = full_module(self.input_states, convs, fully_connected,
+                              num_outputs=num_actions*num_atoms, activation_fn=activation_fn)
+                      
+            self.logits = tf.reshape(out, shape=[-1, num_actions, num_atoms])
             self.probs = tf.nn.softmax(self.logits, axis=2)
-            self.q_values = tf.reduce_sum(tf.multiply(self.probs, self.tensor_z), axis=2)
+            self.q_values = tf.reduce_sum(tf.multiply(self.probs, self.z), axis=2)
 
             ######################### Optimization procedure ########################
 
@@ -234,7 +233,6 @@ class CategoricalDeepQNetwork:
 
             # select q-values and probs for input actions
             self.q_values_selected = tf.gather_nd(self.q_values, action_indices)
-            self.logits_selected = tf.gather_nd(self.logits, action_indices)
             self.probs_selected = tf.gather_nd(self.probs, action_indices)
             
             # select best actions (according to q-values)
@@ -276,25 +274,18 @@ class CategoricalDeepQNetwork:
                      self.input_actions:actions,
                      self.probs_targets:probs_targets}
         sess.run(self.update_model, feed_dict)
-
-        
+  
     def cat_proj(self, sess, states, actions, rewards, done, gamma=0.99):
         """
         Categorical algorithm from https://arxiv.org/abs/1707.06887
         """
-
-        probs = self.get_probs_sa(sess, states, actions)
+    
         atoms_targets = rewards[:,None] + gamma * self.z * (1 - done[:,None])
-
         tz = np.clip(atoms_targets, self.v_min, self.v_max)
-        tz = np.tile(tz, [1, self.num_atoms])
-        tz = np.reshape(tz, [-1, self.num_atoms, self.num_atoms])
-
-        z = np.tile(self.z[None,:], [1, self.num_atoms])
-        z = np.reshape(z, [1, self.num_atoms, self.num_atoms])
-        z = np.transpose(z, axes=[0, 2, 1])
-
-        tz_z = np.clip((1.0 - (np.abs(tz - z) / self.delta_z)), 0, 1)
+        tz_z = tz[:, None, :] - self.z[None, :, None]
+        tz_z = np.clip((1.0 - (np.abs(tz_z) / self.delta_z)), 0, 1)
+        
+        probs = self.get_probs_sa(sess, states, actions)
         probs_targets = np.einsum('bij,bj->bi', tz_z, probs)
 
         return probs_targets  
