@@ -33,7 +33,7 @@ Implementations of different off-policy reinforcement learning algorithms.
 <img src="/img/dqn_quantile.png" width="80%">
 </p>
 
-- Soft Actor-Critic [Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor." arXiv preprint arXiv:1801.01290 (2018).](https://arxiv.org/pdf/1801.01290)
+- Soft Actor-Critic [Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor." ICML (2018).](https://arxiv.org/pdf/1801.01290)
 
 <p align="center">
 <img src="/img/sac_v_network.png" width="80%">
