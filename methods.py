@@ -34,23 +34,14 @@ def fc_module(input_layer, fully_connected, activation_fn=tf.nn.relu):
                  weights_initializer=xavier())
     return out
 
-def func_module(input_layer, num_inputs, num_outputs):
-    """ final module which estimates some function (value, q, policy, etc)
-    """
-    out = input_layer
-    out_weights = tf.Variable(xavier()([num_inputs, num_outputs]))
-    out = tf.matmul(out, out_weights)
-    return out
-
-def full_module(input_layer, convs, fully_connected, num_outputs, 
-                        activation_fn=tf.nn.relu):
-    """ convolutional + fully connected + functional module
+def full_module(input_layer, convs, fully_connected, num_outputs, activation_fn=tf.nn.relu):
+    """ convolutional + fully connected + output
     """
     out = input_layer
     out = conv_module(out, convs, activation_fn)
     out = layers.flatten(out)
     out = fc_module(out, fully_connected, activation_fn)
-    out = func_module(out, fully_connected[-1], num_outputs)
+    out = fc_module(out, [num_outputs], None)
     return out
 
 ####################################################################################################
@@ -69,7 +60,7 @@ class DeepQNetwork:
         
         with tf.variable_scope(scope, reuse=reuse):
 
-            ###################### Neural network architecture ######################
+            ########################### Neural network architecture ###########################
 
             input_shape = [None] + state_shape
             self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
@@ -77,7 +68,7 @@ class DeepQNetwork:
             self.q_values = full_module(self.input_states, convs, fully_connected,
                                         num_actions, activation_fn)
 
-            ######################### Optimization procedure ########################
+            ############################## Optimization procedure #############################
 
             # convert input actions to indices for q-values selection
             self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])
@@ -134,7 +125,7 @@ class DuelingDeepQNetwork:
 
         with tf.variable_scope(scope, reuse=reuse):
             
-            ###################### Neural network architecture ######################
+            ########################### Neural network architecture ###########################
             
             input_shape = [None] + state_shape
             self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
@@ -148,7 +139,7 @@ class DuelingDeepQNetwork:
             a_values_centered = tf.subtract(self.a_values, a_values_mean)
             self.q_values = self.v_values + a_values_centered
 
-            ######################### Optimization procedure ########################
+            ############################## Optimization procedure #############################
 
             # convert input actions to indices for q-values selection
             self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])
@@ -205,7 +196,7 @@ class CategoricalDeepQNetwork:
         
         with tf.variable_scope(scope, reuse=reuse):
 
-            ###################### Neural network architecture ######################
+            ########################### Neural network architecture ###########################
 
             input_shape = [None] + state_shape
             self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
@@ -224,7 +215,7 @@ class CategoricalDeepQNetwork:
             self.probs = tf.nn.softmax(self.logits, axis=2)
             self.q_values = tf.reduce_sum(tf.multiply(self.probs, self.z), axis=2)
 
-            ######################### Optimization procedure ########################
+            ############################## Optimization procedure #############################
 
             # convert input actions to indices for probs and q-values selection
             self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])
@@ -306,7 +297,7 @@ class QuantileRegressionDeepQNetwork:
         
         with tf.variable_scope(scope, reuse=reuse):
 
-            ###################### Neural network architecture ######################
+            ########################### Neural network architecture ###########################
 
             input_shape = [None] + state_shape
             self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
@@ -326,7 +317,7 @@ class QuantileRegressionDeepQNetwork:
             self.atoms = tf.reshape(out, shape=[-1, num_actions, num_atoms])
             self.q_values = tf.reduce_mean(self.atoms, axis=2)
 
-            ######################### Optimization procedure ########################
+            ############################## Optimization procedure #############################
 
             # convert input actions to indices for atoms and q-values selection
             self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])
@@ -407,7 +398,7 @@ class SoftActorCriticNetwork:
         
         with tf.variable_scope(scope, reuse=reuse):
         
-            ###################### Neural network architecture ######################
+            ########################### Neural network architecture ###########################
 
             input_shape = [None] + state_shape
             self.input_states = tf.placeholder(dtype=tf.float32, shape=input_shape)
@@ -420,7 +411,7 @@ class SoftActorCriticNetwork:
                                         num_actions, activation_fn)
             self.p_values = layers.softmax(self.p_logits)
 
-            ######################### Optimization procedure ########################
+            ############################## Optimization procedure #############################
 
             # convert input actions to indices for p-logits and q-values selection
             self.input_actions = tf.placeholder(dtype=tf.int32, shape=[None])

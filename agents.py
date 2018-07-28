@@ -196,7 +196,7 @@ class Agent:
                            
     def update_agent_weights(self, sess, batch):
         
-        # estimate the right hand side of Bellman equation
+        # estimate the right hand side of the Bellman equation
         agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
         q_double = self.target_net.get_q_values_sa(sess, batch.s_, agent_actions)
         targets = batch.r + (self.gamma * q_double * (1 - batch.done))
@@ -255,7 +255,7 @@ class DQNAgent(Agent):
                  convs=[[16, 2, 1], [32, 1, 1]], 
                  fully_connected=[128],
                  activation_fn=tf.nn.relu,
-                 optimizer=tf.train.AdamOptimizer(2.5e-4),
+                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
                  gradient_clip=10.0,
                  save_path="rl_models", model_name="DQN"):
         
@@ -283,7 +283,7 @@ class DuelDQNAgent(Agent):
                  convs=[[16, 2, 1], [32, 1, 1]], 
                  fully_connected=[64],
                  activation_fn=tf.nn.relu,
-                 optimizer=tf.train.AdamOptimizer(2.5e-4),
+                 optimizer=tf.train.AdamOptimizer(2.5e-4, epsilon=0.01/32),
                  gradient_clip=10.0,
                  save_path="rl_models", model_name="DuelDQN"):
         
@@ -333,7 +333,7 @@ class CatDQNAgent(Agent):
 
     def update_agent_weights(self, sess, batch):
 
-        # estimate categorical projection of the RHS of Bellman equation
+        # estimate categorical projection of the RHS of the Bellman equation
         agent_actions = self.agent_net.get_q_argmax(sess, batch.s_)
         probs_targets = self.target_net.cat_proj(sess, batch.s_, agent_actions, batch.r, 
                                                  batch.done, gamma=self.gamma)
